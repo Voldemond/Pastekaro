@@ -4,9 +4,11 @@ import { getPaste } from '@/lib/paste';
 export default async function ViewPastePage({
   params,
 }: {
-  params: { id: string };
+  params: Promise<{ id: string }>; // <--- FIX 1: Type is Promise
 }) {
-  const paste = await getPaste(params.id, true);
+  const { id } = await params; // <--- FIX 2: Await the params
+
+  const paste = await getPaste(id, true);
 
   if (!paste) {
     notFound();
