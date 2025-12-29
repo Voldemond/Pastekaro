@@ -1,6 +1,6 @@
 import { nanoid } from 'nanoid';
 import { kv, getPasteKey } from './kv';
-import { Paste, CreatePasteRequest } from '@/types/paste';
+import type { Paste, CreatePasteRequest } from '@/types/paste';
 
 export async function createPaste(data: CreatePasteRequest): Promise<string> {
   const id = nanoid(10);
