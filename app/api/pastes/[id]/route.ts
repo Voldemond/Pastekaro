@@ -4,11 +4,11 @@ import { FetchPasteResponse } from '@/types/paste';
 
 export async function GET(
   request: NextRequest,
-  // FIX 1: Change the type definition to Promise
+  // FIX 1: The type here MUST be Promise<{ id: string }>
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    // FIX 2: Await the params before using them
+    // FIX 2: You MUST await params before accessing id
     const { id } = await params;
 
     // Handle test mode
