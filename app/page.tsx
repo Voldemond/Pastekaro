@@ -51,7 +51,7 @@ export default function Home() {
 
       <div className="relative w-full max-w-2xl backdrop-blur-xl bg-white/10 border border-white/20 rounded-2xl shadow-2xl p-8">
         <h1 className="text-4xl font-bold bg-gradient-to-r from-blue-400 to-purple-400 bg-clip-text text-transparent mb-2">
-          PasteKaro
+          PasteKaro <a href="/admin" className="text-xs text-gray-700 hover:text-gray-500">⚙</a>
         </h1>
         <p className="text-gray-400 mb-8">Share text securely with auto-expiry and view limits.</p>
         
