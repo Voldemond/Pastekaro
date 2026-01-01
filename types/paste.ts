@@ -23,3 +23,16 @@ export interface FetchPasteResponse {
   remaining_views: number | null;
   expires_at: string | null;
 }
+
+export interface AdminPasteInfo {
+  key: string;
+  id: string;
+  content: string;
+  createdAt: number;
+  ttlSeconds?: number;
+  maxViews?: number;
+  viewCount: number;
+  expiresIn?: string;
+  isExpired: boolean;
+  expiredReason?: string;
+}

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { redis, PASTE_PREFIX } from '@/lib/kv';
+import { isPasteExpired } from '@/lib/paste';
 
 export async function GET(request: NextRequest) {
   try {
@@ -30,20 +31,32 @@ export async function GET(request: NextRequest) {
         const paste = JSON.parse(data);
         const id = key.replace(PASTE_PREFIX, '');
 
+        // Check if expired (but still show to admin)
+        const isExpired = isPasteExpired(paste);
+
         // Calculate expiry info
         let expiresIn = null;
+        let expiredReason = null;
+
         if (paste.ttlSeconds) {
           const expiresAt = paste.createdAt + paste.ttlSeconds * 1000;
           const remaining = Math.max(0, expiresAt - Date.now());
           const seconds = Math.floor(remaining / 1000);
           
-          if (seconds > 3600) {
+          if (seconds <= 0) {
+            expiredReason = 'Time expired';
+          } else if (seconds > 3600) {
             expiresIn = `${Math.floor(seconds / 3600)}h`;
           } else if (seconds > 60) {
             expiresIn = `${Math.floor(seconds / 60)}m`;
           } else {
             expiresIn = `${seconds}s`;
           }
+        }
+
+        // Check view limit expiry
+        if (paste.maxViews !== undefined && paste.viewCount >= paste.maxViews) {
+          expiredReason = 'View limit reached';
         }
 
         return {
@@ -55,6 +68,8 @@ export async function GET(request: NextRequest) {
           maxViews: paste.maxViews,
           viewCount: paste.viewCount,
           expiresIn,
+          isExpired,
+          expiredReason,
         };
       })
     );
@@ -62,7 +77,13 @@ export async function GET(request: NextRequest) {
     // Filter out null values and sort by creation time (newest first)
     const validPastes = pastes
       .filter((p) => p !== null)
-      .sort((a, b) => b!.createdAt - a!.createdAt);
+      .sort((a, b) => {
+        // Sort: Active first, then by creation time
+        if (a!.isExpired !== b!.isExpired) {
+          return a!.isExpired ? 1 : -1; // Active pastes first
+        }
+        return b!.createdAt - a!.createdAt; // Newest first
+      });
 
     return NextResponse.json({ pastes: validPastes });
   } catch (error) {
