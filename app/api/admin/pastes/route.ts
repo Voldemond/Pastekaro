@@ -68,6 +68,7 @@ export async function GET(request: NextRequest) {
             isExpired,
             expiredReason,
             source: 'redis' as const,
+            sizeKB: new Blob([paste.content]).size / 1024,
           };
         })
       );
@@ -146,6 +147,7 @@ export async function GET(request: NextRequest) {
           source: 'postgres' as const,
           userName: row.user_name,
           userEmail: row.user_email,
+          sizeKB: new Blob([row.content]).size / 1024,
         };
       });
 

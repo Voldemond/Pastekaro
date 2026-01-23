@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import bcrypt from 'bcryptjs';
 import { sql } from '@vercel/postgres';
+import { nanoid } from 'nanoid';
 
 export async function POST(request: NextRequest) {
   try {
@@ -36,10 +37,13 @@ export async function POST(request: NextRequest) {
     // Hash password
     const passwordHash = await bcrypt.hash(password, 10);
 
+    // Generate user ID
+    const userId = nanoid(16);
+
     // Create user
     const result = await sql`
-      INSERT INTO users (email, password_hash, name)
-      VALUES (${email}, ${passwordHash}, ${name})
+      INSERT INTO users (id, email, password_hash, name)
+      VALUES (${userId}, ${email}, ${passwordHash}, ${name})
       RETURNING id, email, name
     `;
 

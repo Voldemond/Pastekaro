@@ -16,7 +16,11 @@ interface PasteInfo {
   source: 'redis' | 'postgres';
   title?: string;
   userName?: string;
+  sizeKB?: number;
 }
+
+type FilterType = 'date' | 'size' | 'name';
+type ViewMode = 'all' | 'redis' | 'postgres';
 
 export default function AdminPage() {
   const [pastes, setPastes] = useState<PasteInfo[]>([]);
@@ -25,6 +29,8 @@ export default function AdminPage() {
   const [secret, setSecret] = useState('');
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
+  const [viewMode, setViewMode] = useState<ViewMode>('all');
+  const [filterBy, setFilterBy] = useState<FilterType>('date');
 
   const fetchPastes = async () => {
     setLoading(true);
@@ -50,7 +56,7 @@ export default function AdminPage() {
   };
 
   const deletePaste = async (id: string, source: string) => {
-    if (!confirm('Are you sure you want to delete this paste?')) return;
+    if (!confirm('Delete this paste?')) return;
 
     try {
       const response = await fetch(`/api/admin/pastes/${id}?secret=${secret}&source=${source}`, {
@@ -58,7 +64,6 @@ export default function AdminPage() {
       });
 
       if (!response.ok) throw new Error('Failed to delete paste');
-
       fetchPastes();
     } catch (err: any) {
       alert('Error: ' + err.message);
@@ -70,157 +75,208 @@ export default function AdminPage() {
     fetchPastes();
   };
 
-  // Filter pastes based on search
-  const filteredPastes = pastes.filter(paste =>
-    paste.id.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    paste.content.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    paste.title?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    paste.userName?.toLowerCase().includes(searchQuery.toLowerCase())
-  );
+  // Filter and sort
+  const getFilteredPastes = () => {
+    let filtered = pastes;
 
-  const redisPastes = filteredPastes.filter(p => p.source === 'redis');
-  const postgresPastes = filteredPastes.filter(p => p.source === 'postgres');
-  const activePastes = filteredPastes.filter(p => !p.isExpired);
-  const expiredPastes = filteredPastes.filter(p => p.isExpired);
+    // Filter by view mode
+    if (viewMode === 'redis') {
+      filtered = filtered.filter(p => p.source === 'redis');
+    } else if (viewMode === 'postgres') {
+      filtered = filtered.filter(p => p.source === 'postgres');
+    }
+
+    // Filter by search
+    filtered = filtered.filter(paste =>
+      paste.id.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      paste.content.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      paste.title?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      paste.userName?.toLowerCase().includes(searchQuery.toLowerCase())
+    );
+
+    // Sort by filter
+    if (filterBy === 'size') {
+      filtered.sort((a, b) => (b.sizeKB || 0) - (a.sizeKB || 0));
+    } else if (filterBy === 'name') {
+      filtered.sort((a, b) => (a.title || a.id).localeCompare(b.title || b.id));
+    } else {
+      filtered.sort((a, b) => b.createdAt - a.createdAt);
+    }
+
+    return filtered;
+  };
+
+  const filteredPastes = getFilteredPastes();
+  const redisPastes = pastes.filter(p => p.source === 'redis');
+  const postgresPastes = pastes.filter(p => p.source === 'postgres');
+
+  // Calculate storage stats
+  const redisUsedKB = redisPastes.reduce((sum, p) => sum + (p.sizeKB || 0), 0);
+  const postgresUsedKB = postgresPastes.reduce((sum, p) => sum + (p.sizeKB || 0), 0);
+  const redisLimitKB = 10 * 1024; // 10MB free tier
+  const postgresLimitKB = 500 * 1024; // 500MB free tier
+  const redisPercentage = (redisUsedKB / redisLimitKB) * 100;
+  const postgresPercentage = (postgresUsedKB / postgresLimitKB) * 100;
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-900 via-purple-900 to-slate-900 py-12 px-4">
+    <div className="min-h-screen bg-gradient-to-br from-slate-900 via-purple-900 to-slate-900 p-4">
       <div className="max-w-7xl mx-auto">
-        <div className="backdrop-blur-xl bg-white/10 border border-white/20 rounded-2xl shadow-2xl p-8">
-          <div className="flex items-center justify-between mb-8">
+        <div className="backdrop-blur-xl bg-white/10 border border-white/20 rounded-xl p-6">
+          {/* Header */}
+          <div className="flex items-center justify-between mb-6">
             <div>
-              <h1 className="text-3xl font-bold bg-gradient-to-r from-blue-400 to-purple-400 bg-clip-text text-transparent mb-2">
-                🗄️ Database Admin Panel
+              <h1 className="text-2xl font-bold bg-gradient-to-r from-blue-400 to-purple-400 bg-clip-text text-transparent">
+                Admin Panel
               </h1>
-              <p className="text-gray-300 text-sm">Manage Redis & PostgreSQL databases</p>
+              <p className="text-xs text-gray-400 mt-1">Database Management</p>
             </div>
             {isAuthenticated && (
-              <a
-                href="/"
-                className="px-4 py-2 bg-white/10 hover:bg-white/20 rounded-lg text-white transition-colors text-sm"
-              >
-                ← Back to Home
+              <a href="/" className="px-3 py-1 bg-white/10 hover:bg-white/20 rounded text-white text-sm transition-colors">
+                Home
               </a>
             )}
           </div>
 
-          {/* Login Section */}
+          {/* Login */}
           {!isAuthenticated && (
-            <div className="max-w-md mx-auto">
-              <p className="mb-4 text-gray-300 text-center">Enter Admin Secret to Access Database</p>
-              <form onSubmit={handleLogin} className="flex gap-2">
-                <input
-                  type="password"
-                  placeholder="Admin Secret..."
-                  className="flex-1 bg-white/10 backdrop-blur-sm border border-white/20 rounded-xl px-4 py-3 text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-purple-500"
-                  value={secret}
-                  onChange={(e) => setSecret(e.target.value)}
-                />
-                <button
-                  type="submit"
-                  className="bg-gradient-to-r from-blue-500 to-purple-500 hover:from-blue-600 hover:to-purple-600 px-6 py-3 rounded-xl font-bold text-white transition-all"
-                >
-                  Access
-                </button>
-              </form>
-              {error && <p className="text-red-400 mt-4 text-center text-sm">{error}</p>}
-            </div>
+            <form onSubmit={handleLogin} className="flex gap-2 max-w-md">
+              <input
+                type="password"
+                placeholder="Secret..."
+                className="flex-1 bg-white/10 border border-white/20 rounded px-3 py-2 text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-purple-500 text-sm"
+                value={secret}
+                onChange={(e) => setSecret(e.target.value)}
+              />
+              <button
+                type="submit"
+                className="bg-gradient-to-r from-blue-500 to-purple-500 px-4 py-2 rounded font-medium text-white text-sm"
+              >
+                Access
+              </button>
+              {error && <p className="text-red-400 text-xs">{error}</p>}
+            </form>
           )}
 
-          {/* Dashboard Section */}
+          {/* Dashboard */}
           {isAuthenticated && (
-            <div className="space-y-6">
+            <>
               {loading && (
-                <div className="text-center py-8">
-                  <div className="inline-block animate-spin rounded-full h-10 w-10 border-4 border-purple-500 border-t-transparent"></div>
-                  <p className="text-gray-300 mt-4">Loading...</p>
-                </div>
+                <div className="text-center py-8 text-gray-400">Loading...</div>
               )}
 
               {!loading && (
                 <>
-                  {/* Search Bar */}
-                  <div className="bg-white/5 p-4 rounded-xl border border-white/10">
-                    <input
-                      type="text"
-                      placeholder="🔍 Search by ID, content, title, or user..."
-                      className="w-full bg-black/30 border border-white/20 rounded-lg px-4 py-3 text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-purple-500"
-                      value={searchQuery}
-                      onChange={(e) => setSearchQuery(e.target.value)}
-                    />
+                  {/* Storage Stats */}
+                  <div className="grid grid-cols-2 gap-3 mb-4">
+                    <div className="bg-white/5 border border-blue-500/30 rounded-lg p-3">
+                      <div className="flex items-center justify-between mb-2">
+                        <span className="text-xs text-blue-300 font-medium">Redis</span>
+                        <span className="text-xs text-gray-400">{redisPastes.length} pastes</span>
+                      </div>
+                      <div className="flex items-baseline gap-2">
+                        <span className="text-lg font-bold text-white">{(redisUsedKB / 1024).toFixed(2)} MB</span>
+                        <span className="text-xs text-gray-500">/ 10 MB</span>
+                      </div>
+                      <div className="mt-2 h-1.5 bg-black/30 rounded-full overflow-hidden">
+                        <div
+                          className="h-full bg-gradient-to-r from-blue-500 to-cyan-500 transition-all"
+                          style={{ width: `${Math.min(redisPercentage, 100)}%` }}
+                        />
+                      </div>
+                      <p className="text-xs text-gray-500 mt-1">{redisPercentage.toFixed(1)}% used</p>
+                    </div>
+
+                    <div className="bg-white/5 border border-purple-500/30 rounded-lg p-3">
+                      <div className="flex items-center justify-between mb-2">
+                        <span className="text-xs text-purple-300 font-medium">Postgres</span>
+                        <span className="text-xs text-gray-400">{postgresPastes.length} pastes</span>
+                      </div>
+                      <div className="flex items-baseline gap-2">
+                        <span className="text-lg font-bold text-white">{(postgresUsedKB / 1024).toFixed(2)} MB</span>
+                        <span className="text-xs text-gray-500">/ 500 MB</span>
+                      </div>
+                      <div className="mt-2 h-1.5 bg-black/30 rounded-full overflow-hidden">
+                        <div
+                          className="h-full bg-gradient-to-r from-purple-500 to-pink-500 transition-all"
+                          style={{ width: `${Math.min(postgresPercentage, 100)}%` }}
+                        />
+                      </div>
+                      <p className="text-xs text-gray-500 mt-1">{postgresPercentage.toFixed(1)}% used</p>
+                    </div>
                   </div>
 
-                  {/* Stats Bar */}
-                  <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
-                    <div className="bg-white/5 p-4 rounded-xl border border-white/10 text-center">
-                      <div className="text-gray-400 text-xs mb-1">Total</div>
-                      <div className="text-white font-bold text-2xl">{pastes.length}</div>
-                    </div>
-                    <div className="bg-blue-500/10 p-4 rounded-xl border border-blue-500/30 text-center">
-                      <div className="text-blue-300 text-xs mb-1">Redis (Anon)</div>
-                      <div className="text-white font-bold text-2xl">{redisPastes.length}</div>
-                    </div>
-                    <div className="bg-purple-500/10 p-4 rounded-xl border border-purple-500/30 text-center">
-                      <div className="text-purple-300 text-xs mb-1">Postgres (User)</div>
-                      <div className="text-white font-bold text-2xl">{postgresPastes.length}</div>
-                    </div>
-                    <div className="bg-green-500/10 p-4 rounded-xl border border-green-500/30 text-center">
-                      <div className="text-green-300 text-xs mb-1">Active</div>
-                      <div className="text-white font-bold text-2xl">{activePastes.length}</div>
-                    </div>
-                    <div className="bg-red-500/10 p-4 rounded-xl border border-red-500/30 text-center">
-                      <div className="text-red-300 text-xs mb-1">Expired</div>
-                      <div className="text-white font-bold text-2xl">{expiredPastes.length}</div>
-                    </div>
-                  </div>
-
-                  <div className="flex gap-2">
+                  {/* Tabs */}
+                  <div className="flex gap-2 mb-4">
                     <button
-                      onClick={fetchPastes}
-                      className="px-4 py-2 bg-green-500 hover:bg-green-600 rounded-lg text-white font-medium transition-colors"
+                      onClick={() => setViewMode('all')}
+                      className={`px-3 py-1 rounded text-sm transition-colors ${viewMode === 'all'
+                        ? 'bg-white/20 text-white'
+                        : 'bg-white/5 text-gray-400 hover:bg-white/10'
+                        }`}
                     >
-                      🔄 Refresh
+                      All ({pastes.length})
+                    </button>
+                    <button
+                      onClick={() => setViewMode('redis')}
+                      className={`px-3 py-1 rounded text-sm transition-colors ${viewMode === 'redis'
+                        ? 'bg-blue-500/30 text-blue-200 border border-blue-500/50'
+                        : 'bg-white/5 text-gray-400 hover:bg-white/10'
+                        }`}
+                    >
+                      Redis ({redisPastes.length})
+                    </button>
+                    <button
+                      onClick={() => setViewMode('postgres')}
+                      className={`px-3 py-1 rounded text-sm transition-colors ${viewMode === 'postgres'
+                        ? 'bg-purple-500/30 text-purple-200 border border-purple-500/50'
+                        : 'bg-white/5 text-gray-400 hover:bg-white/10'
+                        }`}
+                    >
+                      Postgres ({postgresPastes.length})
                     </button>
                   </div>
 
-                  {/* Database Sections */}
-                  {redisPastes.length > 0 && (
-                    <div>
-                      <h2 className="text-xl font-bold text-blue-400 mb-3 flex items-center gap-2">
-                        <span>📦 Redis Database</span>
-                        <span className="text-sm text-gray-400">({redisPastes.length} anonymous pastes)</span>
-                      </h2>
-                      <div className="space-y-3">
-                        {redisPastes.map((paste) => (
-                          <PasteCard key={paste.key} paste={paste} onDelete={deletePaste} />
-                        ))}
-                      </div>
-                    </div>
-                  )}
+                  {/* Search & Filter */}
+                  <div className="flex gap-2 mb-4">
+                    <input
+                      type="text"
+                      placeholder="🔍 Search..."
+                      className="flex-1 bg-white/10 border border-white/20 rounded px-3 py-2 text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-purple-500 text-sm"
+                      value={searchQuery}
+                      onChange={(e) => setSearchQuery(e.target.value)}
+                    />
+                    <select
+                      value={filterBy}
+                      onChange={(e) => setFilterBy(e.target.value as FilterType)}
+                      className="bg-white/10 border border-white/20 rounded px-3 py-2 text-white text-sm focus:outline-none focus:ring-2 focus:ring-purple-500"
+                    >
+                      <option value="date">Latest</option>
+                      <option value="size">Size</option>
+                      <option value="name">Name</option>
+                    </select>
+                    <button
+                      onClick={fetchPastes}
+                      className="px-3 py-2 bg-green-500/20 hover:bg-green-500/30 border border-green-500/50 text-green-200 rounded text-sm transition-colors"
+                    >
+                      🔄
+                    </button>
+                  </div>
 
-                  {postgresPastes.length > 0 && (
-                    <div>
-                      <h2 className="text-xl font-bold text-purple-400 mb-3 flex items-center gap-2">
-                        <span>🗃️ PostgreSQL Database</span>
-                        <span className="text-sm text-gray-400">({postgresPastes.length} user pastes)</span>
-                      </h2>
-                      <div className="space-y-3">
-                        {postgresPastes.map((paste) => (
-                          <PasteCard key={paste.key} paste={paste} onDelete={deletePaste} />
-                        ))}
-                      </div>
+                  {/* Pastes List */}
+                  {filteredPastes.length === 0 ? (
+                    <div className="text-center py-12 text-gray-400 text-sm">
+                      {searchQuery ? 'No results' : 'No pastes'}
                     </div>
-                  )}
-
-                  {filteredPastes.length === 0 && (
-                    <div className="text-center py-12 text-gray-400">
-                      <div className="text-6xl mb-4">📭</div>
-                      <p>{searchQuery ? 'No pastes match your search' : 'No pastes in database'}</p>
+                  ) : (
+                    <div className="space-y-2">
+                      {filteredPastes.map((paste) => (
+                        <PasteCard key={paste.key} paste={paste} onDelete={deletePaste} />
+                      ))}
                     </div>
                   )}
                 </>
               )}
-            </div>
+            </>
           )}
         </div>
       </div>
@@ -233,77 +289,63 @@ function PasteCard({ paste, onDelete }: { paste: PasteInfo; onDelete: (id: strin
 
   return (
     <div className={`
-      bg-white/5 backdrop-blur-sm border rounded-xl p-4 transition-all
-      ${paste.isExpired ? 'border-red-500/30 bg-red-500/5' : 'border-white/10 hover:bg-white/10'}
+      bg-white/5 border rounded-lg p-3 transition-all hover:bg-white/10 group
+      ${paste.isExpired ? 'border-red-500/30' : 'border-white/10'}
     `}>
-      <div className="flex items-start justify-between gap-4">
+      <div className="flex items-start justify-between gap-3">
         <div className="flex-1 min-w-0">
-          <div className="flex flex-wrap items-center gap-2 mb-2">
-            <span className={`px-2 py-1 bg-${sourceColor}-500/20 border border-${sourceColor}-500/50 text-${sourceColor}-300 text-xs font-bold rounded`}>
-              {paste.source.toUpperCase()}
+          {/* Header Row */}
+          <div className="flex items-center gap-2 mb-2 flex-wrap">
+            <span className={`px-2 py-0.5 bg-${sourceColor}-500/20 border border-${sourceColor}-500/50 text-${sourceColor}-300 text-[10px] font-bold rounded uppercase`}>
+              {paste.source}
             </span>
-
-            <span className="text-blue-400 font-mono text-sm font-bold">
-              {paste.id}
-            </span>
-
+            <span className="text-white text-sm font-mono font-medium">{paste.id}</span>
             {paste.title && (
-              <span className="text-purple-300 text-sm font-medium">
-                "{paste.title}"
-              </span>
+              <span className="text-gray-300 text-sm">"{paste.title}"</span>
             )}
-
             {paste.userName && (
-              <span className="text-gray-400 text-xs">
-                by {paste.userName}
-              </span>
+              <span className="text-gray-500 text-xs">@{paste.userName}</span>
             )}
-
             {paste.isExpired && (
-              <span className="px-2 py-1 bg-red-500/20 border border-red-500/50 text-red-300 text-xs font-bold rounded">
-                ❌ {paste.expiredReason}
-              </span>
-            )}
-
-            <span className="text-gray-400 text-xs">
-              Views: {paste.viewCount}
-              {paste.maxViews && ` / ${paste.maxViews}`}
-            </span>
-
-            {paste.expiresIn && !paste.isExpired && (
-              <span className="text-purple-400 text-xs">
-                ⏰ {paste.expiresIn}
+              <span className="px-2 py-0.5 bg-red-500/20 border border-red-500/50 text-red-300 text-[10px] rounded">
+                {paste.expiredReason}
               </span>
             )}
           </div>
 
-          <div className="bg-black/30 rounded-lg p-3 mb-2">
-            <pre className="text-gray-200 text-xs font-mono whitespace-pre-wrap break-words max-h-32 overflow-y-auto">
-              {paste.content.substring(0, 300)}
-              {paste.content.length > 300 && '...'}
+          {/* Content Preview */}
+          <div className="bg-black/30 rounded p-2 mb-2">
+            <pre className="text-gray-300 text-[11px] font-mono whitespace-pre-wrap break-words line-clamp-2">
+              {paste.content.substring(0, 150)}
+              {paste.content.length > 150 && '...'}
             </pre>
           </div>
 
-          <div className="text-xs text-gray-400">
-            Created: {new Date(paste.createdAt).toLocaleString()}
+          {/* Stats Row */}
+          <div className="flex items-center gap-3 text-[11px] text-gray-500">
+            <span className="font-bold text-yellow-400">{(paste.sizeKB || 0).toFixed(1)} KB</span>
+            <span>👁 {paste.viewCount}{paste.maxViews && `/${paste.maxViews}`}</span>
+            {paste.expiresIn && <span>⏰ {paste.expiresIn}</span>}
+            <span>{new Date(paste.createdAt).toLocaleDateString()}</span>
           </div>
         </div>
 
-        <div className="flex flex-col gap-2">
+        {/* Actions */}
+        <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
           {!paste.isExpired && (
             <a
               href={`/p/${paste.id}`}
               target="_blank"
-              className="px-3 py-1 bg-purple-500 hover:bg-purple-600 text-white rounded-lg text-xs font-medium transition-colors text-center whitespace-nowrap"
+              className="px-2 py-1 bg-purple-500 hover:bg-purple-600 text-white rounded text-[11px] transition-colors"
             >
               View
             </a>
           )}
           <button
             onClick={() => onDelete(paste.id, paste.source)}
-            className="px-3 py-1 bg-red-500 hover:bg-red-600 text-white rounded-lg text-xs font-medium transition-colors whitespace-nowrap"
+            className="px-2 py-1 bg-red-500/20 hover:bg-red-500/40 text-red-300 rounded text-[11px] transition-colors"
           >
-            Delete
+            Del
           </button>
         </div>
       </div>

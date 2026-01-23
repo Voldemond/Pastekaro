@@ -1,10 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { getServerSession } from 'next-auth';
+import { authOptions } from '@/lib/auth';
 import { createPaste } from '@/lib/paste';
-import { CreatePasteRequest, CreatePasteResponse } from '@/types/paste';
+import { sql } from '@/lib/db';
+import { nanoid } from 'nanoid';
+import type { CreatePasteRequest, CreatePasteResponse } from '@/types/paste';
 
 export async function POST(request: NextRequest) {
   try {
-    const body: CreatePasteRequest = await request.json();
+    const body: any = await request.json();
 
     // Validate content
     if (!body.content || typeof body.content !== 'string' || body.content.trim() === '') {
@@ -34,13 +38,56 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    const id = await createPaste(body);
-    const baseUrl = request.nextUrl.origin;
-    const url = `${baseUrl}/p/${id}`;
+    // Check if user is logged in
+    const session = await getServerSession(authOptions);
 
-    const response: CreatePasteResponse = { id, url };
+    // If user wants to save to account (logged in + saveToAccount flag)
+    if (session && body.saveToAccount) {
+      // Save to Postgres with title
+      const pasteId = nanoid(10);
+      const title = body.title || 'Untitled Paste';
 
-    return NextResponse.json(response, { status: 201 });
+      await sql`
+        INSERT INTO pastes (
+          id, user_id, title, content, 
+          ttl_seconds, max_views, view_count
+        )
+        VALUES (
+          ${pasteId}, 
+          ${session.user.id}, 
+          ${title}, 
+          ${body.content},
+          ${body.ttl_seconds || null},
+          ${body.max_views || null},
+          0
+        )
+      `;
+
+      const baseUrl = request.nextUrl.origin;
+      const url = `${baseUrl}/p/${pasteId}`;
+
+      return NextResponse.json({
+        id: pasteId,
+        url,
+        saved: true,
+        message: 'Paste saved to your account'
+      }, { status: 201 });
+    } else {
+      // Save to Redis (anonymous or user chose not to save)
+      const pasteData: CreatePasteRequest = {
+        content: body.content,
+        ttl_seconds: body.ttl_seconds,
+        max_views: body.max_views,
+      };
+
+      const id = await createPaste(pasteData);
+      const baseUrl = request.nextUrl.origin;
+      const url = `${baseUrl}/p/${id}`;
+
+      const response: CreatePasteResponse = { id, url };
+
+      return NextResponse.json(response, { status: 201 });
+    }
   } catch (error) {
     console.error('Error creating paste:', error);
     return NextResponse.json(
