@@ -1,8 +1,14 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useSession, signOut } from 'next-auth/react';
 import Link from 'next/link';
+
+interface Collection {
+  id: string;
+  name: string;
+  pasteCount: number;
+}
 
 export default function Home() {
   const { data: session, status } = useSession();
@@ -11,17 +17,40 @@ export default function Home() {
   const [ttl, setTtl] = useState('');
   const [maxViews, setMaxViews] = useState('');
   const [saveToAccount, setSaveToAccount] = useState(false);
+  const [selectedCollection, setSelectedCollection] = useState('');
+  const [collections, setCollections] = useState<Collection[]>([]);
+  const [collectionsLoading, setCollectionsLoading] = useState(false);
   const [link, setLink] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
-  const [successMessage, setSuccessMessage] = useState('');
+
+  // Fetch collections when saveToAccount is checked
+  useEffect(() => {
+    if (session && saveToAccount && collections.length === 0) {
+      fetchCollections();
+    }
+  }, [session, saveToAccount]);
+
+  const fetchCollections = async () => {
+    setCollectionsLoading(true);
+    try {
+      const res = await fetch('/api/collections');
+      if (res.ok) {
+        const data = await res.json();
+        setCollections(data.collections || []);
+      }
+    } catch (error) {
+      console.error('Error fetching collections:', error);
+    } finally {
+      setCollectionsLoading(false);
+    }
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
     setError('');
     setLink('');
-    setSuccessMessage('');
 
     try {
       const payload: any = {
@@ -30,10 +59,13 @@ export default function Home() {
         max_views: maxViews ? parseInt(maxViews) : undefined,
       };
 
-      // Add title and saveToAccount if user is logged in
+      // Add title, saveToAccount, and collectionId if user is logged in
       if (session && saveToAccount) {
         payload.title = title || 'Untitled Paste';
         payload.saveToAccount = true;
+        if (selectedCollection) {
+          payload.collectionId = selectedCollection;
+        }
       }
 
       const res = await fetch('/api/pastes', {
@@ -46,12 +78,12 @@ export default function Home() {
 
       if (res.ok) {
         setLink(data.url);
-        setSuccessMessage(data.message || 'Paste created successfully!');
         setContent('');
         setTitle('');
         setTtl('');
         setMaxViews('');
         setSaveToAccount(false);
+        setSelectedCollection('');
       } else {
         setError(data.error || 'Failed to create paste');
       }
@@ -62,6 +94,8 @@ export default function Home() {
     }
   };
 
+  const selectedCollectionName = collections.find(c => c.id === selectedCollection)?.name;
+
   return (
     <main className="min-h-screen bg-gradient-to-br from-slate-900 via-purple-900 to-slate-900 text-white flex items-center justify-center p-4">
       {/* Background effects */}
@@ -71,7 +105,7 @@ export default function Home() {
       </div>
 
       <div className="relative w-full max-w-2xl backdrop-blur-xl bg-white/10 border border-white/20 rounded-2xl shadow-2xl p-8">
-        {/* Minimalist Auth - Only show if NOT logged in */}
+        {/* Auth buttons */}
         {!session && (
           <div className="absolute top-6 right-6">
             <Link
@@ -83,7 +117,6 @@ export default function Home() {
           </div>
         )}
 
-        {/* Show user info if logged in */}
         {session && (
           <div className="absolute top-6 right-6 flex items-center gap-3">
             <Link
@@ -101,7 +134,7 @@ export default function Home() {
           </div>
         )}
 
-        {/* Invisible admin link - triple-click the dot */}
+        {/* Hidden admin link */}
         <div className="absolute bottom-4 left-1/2 -translate-x-1/2">
           <a
             href="/admin"
@@ -115,8 +148,9 @@ export default function Home() {
         <h1 className="text-4xl font-bold bg-gradient-to-r from-blue-400 to-purple-400 bg-clip-text text-transparent mb-2">
           PasteKaro
         </h1>
+
         <form onSubmit={handleSubmit} className="mt-6 space-y-4">
-          {/* Title field - only show if logged in AND checkbox is checked */}
+          {/* Title field - only show if saving to account */}
           {session && saveToAccount && (
             <div>
               <input
@@ -158,17 +192,51 @@ export default function Home() {
             />
           </div>
 
-          {/* Save to account checkbox - compact */}
+          {/* Save to account section */}
           {session && (
-            <label className="flex items-center gap-2 cursor-pointer text-sm text-gray-300 hover:text-white transition-colors">
-              <input
-                type="checkbox"
-                checked={saveToAccount}
-                onChange={(e) => setSaveToAccount(e.target.checked)}
-                className="w-4 h-4 rounded bg-black/30 border-white/20 text-purple-600 focus:ring-2 focus:ring-purple-500"
-              />
-              Save to my account
-            </label>
+            <div className="space-y-3">
+              <label className="flex items-center gap-2 cursor-pointer text-sm text-gray-300 hover:text-white transition-colors">
+                <input
+                  type="checkbox"
+                  checked={saveToAccount}
+                  onChange={(e) => setSaveToAccount(e.target.checked)}
+                  className="w-4 h-4 rounded bg-black/30 border-white/20 text-purple-600 focus:ring-2 focus:ring-purple-500"
+                />
+                Save to my account
+              </label>
+
+              {/* Collection selector - only show when saving to account */}
+              {saveToAccount && (
+                <div className="pl-6">
+                  <label className="block text-xs text-gray-400 mb-1.5">
+                    Add to collection (optional)
+                  </label>
+                  {collectionsLoading ? (
+                    <div className="text-xs text-gray-500">Loading collections...</div>
+                  ) : collections.length === 0 ? (
+                    <div className="text-xs text-gray-500">
+                      No collections yet.{' '}
+                      <Link href="/dashboard" className="text-purple-400 hover:underline">
+                        Create one
+                      </Link>
+                    </div>
+                  ) : (
+                    <select
+                      value={selectedCollection}
+                      onChange={(e) => setSelectedCollection(e.target.value)}
+                      className="w-full bg-black/30 border border-white/10 rounded-lg p-2.5 text-gray-100 focus:outline-none focus:ring-2 focus:ring-purple-500 text-sm"
+                    >
+                      <option value="">Don't add to collection</option>
+                      {collections.map((collection) => (
+                        <option key={collection.id} value={collection.id}>
+                          {collection.name} ({collection.pasteCount} items)
+                        </option>
+                      ))}
+                    </select>
+                  )}
+                </div>
+              )}
+            </div>
           )}
 
           <button
@@ -180,11 +248,14 @@ export default function Home() {
           </button>
         </form>
 
-        {/* Remove the info banner for guests - keep it minimal */}
-
         {link && (
           <div className="mt-6 p-4 bg-green-500/10 border border-green-500/30 rounded-lg">
-            <p className="text-green-300 text-sm mb-2">✓ Created</p>
+            <p className="text-green-300 text-sm mb-2">
+              ✓ Created
+              {selectedCollectionName && (
+                <span className="text-green-400"> and added to "{selectedCollectionName}"</span>
+              )}
+            </p>
             <div className="flex items-center gap-2 bg-black/20 p-2 rounded">
               <a href={link} target="_blank" className="text-blue-400 hover:underline break-all text-sm flex-1">
                 {link}
@@ -214,6 +285,6 @@ export default function Home() {
           </div>
         )}
       </div>
-    </main >
-  )
+    </main>
+  );
 }

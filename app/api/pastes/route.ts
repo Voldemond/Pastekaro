@@ -46,10 +46,23 @@ export async function POST(request: NextRequest) {
       // Save to Postgres with title
       const pasteId = nanoid(10);
       const title = body.title || 'Untitled Paste';
+      const collectionId = body.collectionId || null;
+
+      // If adding to collection, get the next order number
+      let orderInPackage = 0;
+      if (collectionId) {
+        const orderResult = await sql`
+          SELECT COALESCE(MAX(order_in_package), -1) + 1 as next_order
+          FROM pastes
+          WHERE package_id = ${collectionId}
+        `;
+        orderInPackage = orderResult.rows[0]?.next_order || 0;
+      }
 
       await sql`
         INSERT INTO pastes (
           id, user_id, title, content, 
+          package_id, order_in_package,
           ttl_seconds, max_views, view_count
         )
         VALUES (
@@ -57,6 +70,8 @@ export async function POST(request: NextRequest) {
           ${session.user.id}, 
           ${title}, 
           ${body.content},
+          ${collectionId},
+          ${orderInPackage},
           ${body.ttl_seconds || null},
           ${body.max_views || null},
           0
@@ -70,7 +85,8 @@ export async function POST(request: NextRequest) {
         id: pasteId,
         url,
         saved: true,
-        message: 'Paste saved to your account'
+        collectionId: collectionId,
+        message: collectionId ? 'Paste saved and added to collection' : 'Paste saved to your account'
       }, { status: 201 });
     } else {
       // Save to Redis (anonymous or user chose not to save)
