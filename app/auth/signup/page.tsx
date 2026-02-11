@@ -1,8 +1,10 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
+
+type PersonaKey = 'unknown' | 'developer' | 'student' | 'team' | 'general';
 
 export default function SignupPage() {
     const router = useRouter();
@@ -13,9 +15,55 @@ export default function SignupPage() {
     });
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState('');
+    const [detectedPersona, setDetectedPersona] = useState<PersonaKey>('unknown');
+
+    // Persona detection
+    useEffect(() => {
+        const email = formData.email.toLowerCase();
+        const name = formData.name.toLowerCase();
+
+        let persona: PersonaKey = 'unknown';
+        if (
+            email.includes('github') ||
+            email.includes('dev') ||
+            name.includes('dev') ||
+            name.includes('engineer')
+        ) {
+            persona = 'developer';
+        } else if (email.includes('.edu') || email.includes('student') || name.includes('student')) {
+            persona = 'student';
+        } else if (email.includes('team') || email.includes('admin') || email.includes('manager')) {
+            persona = 'team';
+        } else if (formData.email.includes('@') && formData.name.length > 2) {
+            persona = 'general';
+        }
+        setDetectedPersona(persona);
+    }, [formData.email, formData.name]);
+
+    const personas = {
+        unknown: { color: '#6366F1' },
+        developer: { color: '#3B82F6' },
+        student: { color: '#10B981' },
+        team: { color: '#8B5CF6' },
+        general: { color: '#6366F1' },
+    };
+
+    const currentPersona = personas[detectedPersona];
+
+    const nameDone = formData.name.trim().length > 1;
+    const emailDone = formData.email.includes('@');
+    const passwordDone = formData.password.length >= 6;
+
+    const stepsCompleted =
+        (nameDone ? 1 : 0) + (emailDone ? 1 : 0) + (passwordDone ? 1 : 0);
+    const progressPercent = (stepsCompleted / 3) * 100;
+
+    const canSubmit = nameDone && emailDone && passwordDone && !loading;
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
+        if (!canSubmit) return;
+
         setLoading(true);
         setError('');
 
@@ -42,85 +90,150 @@ export default function SignupPage() {
     };
 
     return (
-        <div className="min-h-screen bg-gradient-to-br from-slate-900 via-purple-900 to-slate-900 flex items-center justify-center p-4">
-            <div className="w-full max-w-md backdrop-blur-xl bg-white/10 border border-white/20 rounded-2xl shadow-2xl p-8">
-                <div className="text-center mb-8">
-                    <h1 className="text-3xl font-bold bg-gradient-to-r from-blue-400 to-purple-400 bg-clip-text text-transparent mb-2">
-                        Create Account
-                    </h1>
-                    <p className="text-gray-400 text-sm">Join PasteKaro to save and organize your pastes</p>
-                </div>
-
-                <form onSubmit={handleSubmit} className="space-y-5">
+        <div className="min-h-screen bg-slate-950 flex items-center justify-center p-4">
+            <div className="w-full max-w-5xl flex flex-col lg:flex-row gap-16 items-center">
+                {/* Left: Clean messaging */}
+                <div className="flex-1 text-slate-100 space-y-6 max-w-xl">
                     <div>
-                        <label className="block text-sm font-medium text-gray-300 mb-2">
-                            Name
-                        </label>
-                        <input
-                            type="text"
-                            required
-                            className="w-full bg-black/30 border border-white/10 rounded-xl px-4 py-3 text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-purple-500"
-                            placeholder="Kunal More"
-                            value={formData.name}
-                            onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                        />
+                        <h1 className="text-4xl font-bold mb-3">
+                            Paste. Share. Done.
+                        </h1>
+                        <p className="text-lg text-slate-400 leading-relaxed">
+                            Sign up to save your pastes, control privacy, and share instantly.
+                        </p>
                     </div>
 
-                    <div>
-                        <label className="block text-sm font-medium text-gray-300 mb-2">
-                            Email
-                        </label>
-                        <input
-                            type="email"
-                            required
-                            className="w-full bg-black/30 border border-white/10 rounded-xl px-4 py-3 text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-purple-500"
-                            placeholder="kunal@example.com"
-                            value={formData.email}
-                            onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-                        />
-                    </div>
-
-                    <div>
-                        <label className="block text-sm font-medium text-gray-300 mb-2">
-                            Password
-                        </label>
-                        <input
-                            type="password"
-                            required
-                            minLength={6}
-                            className="w-full bg-black/30 border border-white/10 rounded-xl px-4 py-3 text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-purple-500"
-                            placeholder="At least 6 characters"
-                            value={formData.password}
-                            onChange={(e) => setFormData({ ...formData, password: e.target.value })}
-                        />
-                    </div>
-
-                    {error && (
-                        <div className="p-3 bg-red-500/20 border border-red-500/50 rounded-lg text-red-200 text-sm">
-                            {error}
+                    <div className="space-y-3 pt-4 text-sm text-slate-300">
+                        <div className="flex items-start gap-3">
+                            <span className="text-lg">📋</span>
+                            <div>
+                                <div className="font-medium mb-0.5">Paste & Share Instantly</div>
+                                <div className="text-slate-500">Get a shareable link in seconds</div>
+                            </div>
                         </div>
-                    )}
-
-                    <button
-                        type="submit"
-                        disabled={loading}
-                        className="w-full bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-500 hover:to-purple-500 text-white font-bold py-3 rounded-xl transition-all disabled:opacity-50"
-                    >
-                        {loading ? 'Creating Account...' : 'Sign Up'}
-                    </button>
-                </form>
-
-                <div className="mt-6 text-center text-sm text-gray-400">
-                    Already have an account?{' '}
-                    <Link href="/auth/login" className="text-blue-400 hover:text-blue-300 font-medium">
-                        Log in
-                    </Link>
+                        <div className="flex items-start gap-3">
+                            <span className="text-lg">🔒</span>
+                            <div>
+                                <div className="font-medium mb-0.5">Private or Public</div>
+                                <div className="text-slate-500">Control who sees your content</div>
+                            </div>
+                        </div>
+                        <div className="flex items-start gap-3">
+                            <span className="text-lg">☁️</span>
+                            <div>
+                                <div className="font-medium mb-0.5">Never Lose It</div>
+                                <div className="text-slate-500">Saved securely in the cloud</div>
+                            </div>
+                        </div>
+                    </div>
                 </div>
 
-                <div className="mt-4 text-center">
-                    <Link href="/" className="text-gray-500 hover:text-gray-400 text-sm">
-                        ← Back to Home
-                    </Link>
+                {/* Right: Form */}
+                <div className="flex-1 max-w-md w-full">
+                    <form onSubmit={handleSubmit} className="bg-slate-900 border border-slate-800 rounded-2xl p-8">
+                        <div className="mb-6">
+                            <h2 className="text-xl font-semibold text-slate-100 mb-1">Create Account</h2>
+                            <p className="text-sm text-slate-500">Join thousands organizing their pastes</p>
+                        </div>
+
+                        {/* Error message */}
+                        {error && (
+                            <div className="mb-5 p-3 bg-red-500/10 border border-red-500/20 rounded-lg text-red-400 text-sm">
+                                {error}
+                            </div>
+                        )}
+
+                        <div className="space-y-4">
+                            {/* Name */}
+                            <div>
+                                <label className="block text-xs font-medium text-slate-400 mb-2">
+                                    Full name
+                                </label>
+                                <input
+                                    type="text"
+                                    required
+                                    className="w-full px-4 py-2.5 rounded-lg border border-slate-700 bg-slate-950/50 text-slate-100 placeholder-slate-600 text-sm focus:outline-none focus:border-slate-600 transition-colors"
+                                    placeholder="Kunal More"
+                                    value={formData.name}
+                                    onChange={(e) =>
+                                        setFormData((prev) => ({ ...prev, name: e.target.value }))
+                                    }
+                                />
+                            </div>
+
+                            {/* Email */}
+                            <div>
+                                <label className="block text-xs font-medium text-slate-400 mb-2">
+                                    Email address
+                                </label>
+                                <input
+                                    type="email"
+                                    required
+                                    className="w-full px-4 py-2.5 rounded-lg border border-slate-700 bg-slate-950/50 text-slate-100 placeholder-slate-600 text-sm focus:outline-none focus:border-slate-600 transition-colors"
+                                    placeholder="you@example.com"
+                                    value={formData.email}
+                                    onChange={(e) =>
+                                        setFormData((prev) => ({ ...prev, email: e.target.value }))
+                                    }
+                                />
+                            </div>
+
+                            {/* Password */}
+                            <div>
+                                <label className="block text-xs font-medium text-slate-400 mb-2">
+                                    Password
+                                </label>
+                                <input
+                                    type="password"
+                                    required
+                                    minLength={6}
+                                    className="w-full px-4 py-2.5 rounded-lg border border-slate-700 bg-slate-950/50 text-slate-100 placeholder-slate-600 text-sm focus:outline-none focus:border-slate-600 transition-colors"
+                                    placeholder="At least 6 characters"
+                                    value={formData.password}
+                                    onChange={(e) =>
+                                        setFormData((prev) => ({ ...prev, password: e.target.value }))
+                                    }
+                                />
+                                {formData.password && formData.password.length < 6 && (
+                                    <div className="text-xs text-slate-500 mt-1.5">
+                                        {6 - formData.password.length} more character{6 - formData.password.length > 1 ? 's' : ''}
+                                    </div>
+                                )}
+                            </div>
+                        </div>
+
+                        {/* Simple progress */}
+                        <div className="mt-6">
+                            <div className="h-1 rounded-full bg-slate-800 overflow-hidden">
+                                <div
+                                    className="h-full transition-all duration-300"
+                                    style={{
+                                        width: `${progressPercent}%`,
+                                        backgroundColor: currentPersona.color,
+                                    }}
+                                />
+                            </div>
+                        </div>
+
+                        {/* Button */}
+                        <button
+                            type="submit"
+                            disabled={!canSubmit}
+                            className="mt-6 w-full py-3 rounded-lg text-sm font-medium text-white transition-all disabled:opacity-40 disabled:cursor-not-allowed"
+                            style={{
+                                backgroundColor: canSubmit ? currentPersona.color : '#374151',
+                            }}
+                        >
+                            {loading ? 'Creating account...' : 'Create account'}
+                        </button>
+
+                        <div className="mt-5 text-center text-xs text-slate-500">
+                            Already have an account?{' '}
+                            <Link href="/auth/login" className="text-slate-400 hover:text-slate-300">
+                                Log in
+                            </Link>
+                        </div>
+                    </form>
                 </div>
             </div>
         </div>
