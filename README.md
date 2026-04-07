@@ -1,39 +1,53 @@
-# Pastebin-Lite
+# Pastekaro (Pastebin-Lite)
 
-A simple pastebin application built with Next.js 14 and Vercel KV (Redis), allowing users to create and share text pastes with optional time-to-live (TTL) and view count limits.
+**Pastekaro** is a minimalist, modern, and powerful pastebin application built with Next.js. It features a unique dual-mode architecture that caters to both anonymous users looking for quick text sharing and power users who want persistent organization.
 
-## Features
+---
 
-- Create text pastes with optional expiry constraints
-- Share pastes via unique URLs
-- Optional TTL (time-to-live) for automatic expiry
-- Optional view count limits
-- Automatic paste deletion when constraints are met
-- Clean, responsive UI
+## 🎯 What Problem Does It Solve?
 
-## Tech Stack
+Traditional pastebins often force a choice: either they are too simple (you lose track of your pastes, no editing, no organization) or they are too complex (requiring accounts to do anything, cluttered UIs). 
 
-- **Framework**: Next.js 14 (App Router)
+**Pastekaro solves this by offering a frictionless workflow:**
+1. **The Fast Path:** Anyone can drop text, set expiry constraints (time or views), and instantly get a shareable link. No sign-up required.
+2. **The Power Path:** Logged-in users get a dedicated dashboard to save, edit, and organize their pastes into thematic collections. They can edit an existing paste to fix typos without the URL ever changing, solving the "I shared a broken link" problem.
+
+## ✨ Functionalities & Features
+
+### For Everyone (Anonymous Mode)
+- **Zero-Friction Creation:** Paste text and get a link instantly.
+- **Auto-Destruct (TTL):** Set a Time-to-Live (e.g., 3600 seconds) after which the paste automatically deletes itself.
+- **Burn After Reading:** Set a Maximum View count (e.g., 5 views). After the 5th view, the paste self-destructs.
+- **Fast Storage:** Powered by Vercel KV (Redis) for ultra-low latency reads and native TTL support.
+
+### For Authenticated Users (Power Mode)
+- **User Accounts:** Secure authentication powered by NextAuth (custom Credentials provider).
+- **Persistent Storage:** Pastes saved to the account are stored permanently in PostgreSQL.
+- **Rich Dashboard:** A comprehensive centralized view of all your pastes and collections.
+- **Editable Pastes:** Fix typos or update code! Logged-in users can edit paste content, title, and constraints while **preserving the original URL**.
+- **Collections (Packages):** 
+  - Group related pastes into named Collections.
+  - Set Collections as Public (🌍) or Private (🔒).
+  - Share a single link to a Collection (`/c/[id]`) so others can view all associated pastes.
+  - Manage ordering: easily drag or move pastes up and down within a collection.
+  - Add new pastes directly from inside the collection manager.
+
+## 🛠 Tech Stack
+
+- **Framework**: Next.js 16 (App Router)
 - **Language**: TypeScript
-- **Styling**: Tailwind CSS
-- **Persistence**: Vercel KV (Redis)
-- **Deployment**: Vercel
+- **Styling**: Tailwind CSS 4
+- **Database (Relational)**: Vercel Postgres (for Users, Collections, saved Pastes)
+- **Database (Key-Value)**: Vercel KV / Redis (for anonymous temporary pastes)
+- **Authentication**: NextAuth.js (v4) with JWT strategy and bcrypt password hashing
+- **ID Generation**: `nanoid` for short, URL-friendly IDs
 
-## Persistence Layer
-
-This application uses **Vercel KV** (a Redis-compatible key-value store) for data persistence. Vercel KV is ideal for serverless deployments as it:
-
-- Survives across serverless function invocations
-- Provides automatic TTL support for time-based expiry
-- Offers low-latency global access
-- Requires no manual database setup or migrations
-
-## Running Locally
+## 🚀 Running Locally
 
 ### Prerequisites
 
 - Node.js 18+ installed
-- Vercel account (for KV database)
+- Vercel account (for Postgres & KV databases)
 - Vercel CLI installed (`npm i -g vercel`)
 
 ### Setup Steps
@@ -49,17 +63,13 @@ This application uses **Vercel KV** (a Redis-compatible key-value store) for dat
    npm install
    ```
 
-3. **Set up Vercel KV**
+3. **Set up Vercel Environment (Postgres, KV, Auth)**
    ```bash
-   # Login to Vercel
    vercel login
-
-   # Link your project to Vercel
    vercel link
-
-   # Pull environment variables (includes KV credentials)
    vercel env pull .env.local
    ```
+   *Make sure you have added `NEXTAUTH_SECRET` and `NEXTAUTH_URL=http://localhost:3000` to your local `.env.local` file.*
 
 4. **Run the development server**
    ```bash
@@ -69,110 +79,25 @@ This application uses **Vercel KV** (a Redis-compatible key-value store) for dat
 5. **Open your browser**
    Navigate to [http://localhost:3000](http://localhost:3000)
 
-## Deployment
+## ☁️ Deployment
 
-### Deploy to Vercel
+When deploying to Vercel, ensure you have set all required environment variables in your Vercel Project Settings:
 
-1. **Push your code to GitHub/GitLab/Bitbucket**
+1. `POSTGRES_URL` (Auto-configured if you use Vercel Storage)
+2. `REDIS_URL` / `KV_URL` (Auto-configured if you use Vercel Storage)
+3. `NEXTAUTH_SECRET` (Run `openssl rand -base64 32` to generate one)
+4. `NEXTAUTH_URL` (e.g., `https://pastekaro.vercel.app`)
 
-2. **Import project in Vercel**
-   - Go to [vercel.com](https://vercel.com)
-   - Click "Add New Project"
-   - Import your repository
+## 🛣️ API Endpoints
 
-3. **Add Vercel KV**
-   - In your project dashboard, go to "Storage"
-   - Click "Create Database"
-   - Select "KV"
-   - Follow the prompts
+The app exposes a robust API to power its client-side interactions:
 
-4. **Deploy**
-   ```bash
-   vercel --prod
-   ```
+- **Auth**: `/api/auth/signup`, NextAuth routes
+- **Anonymous Pastes**: `POST /api/pastes`, `GET /api/pastes/[id]`
+- **Authenticated Pastes**: `GET /api/pastes/my`, `GET/PUT/DELETE /api/pastes/my/[id]`
+- **Collections**: `GET/POST /api/collections`, `GET/PUT/DELETE/PATCH /api/collections/[id]`
+- **Public View**: `GET /api/collections/[id]/public`
 
-Or simply push to your main branch if connected to Vercel.
-
-## API Endpoints
-
-### Health Check
-```
-GET /api/healthz
-```
-Returns service health status and KV connectivity.
-
-### Create Paste
-```
-POST /api/pastes
-Content-Type: application/json
-
-{
-  "content": "Your text here",
-  "ttl_seconds": 3600,    // Optional
-  "max_views": 5          // Optional
-}
-```
-
-### Fetch Paste (API)
-```
-GET /api/pastes/:id
-```
-Returns paste content and metadata. Increments view count.
-
-### View Paste (HTML)
-```
-GET /p/:id
-```
-Renders paste content as HTML page.
-
-## Design Decisions
-
-### 1. **Vercel KV for Persistence**
-   - Chose Redis-compatible KV store for serverless compatibility
-   - Native TTL support eliminates need for background cleanup jobs
-   - Atomic operations ensure view count accuracy
-
-### 2. **View Count Management**
-   - View count increments on both API fetch and HTML page view
-   - Paste is deleted immediately when view limit is reached
-   - Uses optimistic locking to prevent race conditions
-
-### 3. **TTL Handling**
-   - Leverages Redis native TTL for automatic expiry
-   - Additional application-level checks for test mode support
-   - Recalculates remaining TTL when updating view counts
-
-### 4. **Test Mode**
-   - Supports `TEST_MODE=1` environment variable
-   - Accepts `x-test-now-ms` header for deterministic time testing
-   - Allows automated testing of time-based expiry
-
-### 5. **Error Handling**
-   - All unavailable pastes return 404 (expired, view limit exceeded, or not found)
-   - Consistent JSON error responses for API endpoints
-   - Input validation with clear error messages
-
-### 6. **Security**
-   - Content is rendered safely using `<pre>` tags (no script execution)
-   - Input sanitization on paste creation
-   - No sensitive data in URLs
-
-## Testing
-
-The application is designed to pass automated tests that verify:
-
-- Health check endpoint functionality
-- Paste creation and retrieval
-- TTL expiry behavior
-- View count limits
-- Combined constraints
-- Error handling
-
-To enable test mode for deterministic time testing:
-```bash
-TEST_MODE=1 npm run dev
-```
-
-## License
+## 📜 License
 
 MIT

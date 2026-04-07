@@ -59,6 +59,7 @@ export default function DashboardPage() {
   const [collectionPastes, setCollectionPastes] = useState<CollectionPaste[]>([]);
   const [formLoading, setFormLoading] = useState(false);
   const [formError, setFormError] = useState('');
+  const [showAddExisting, setShowAddExisting] = useState(false);
 
   // Paste editing/creating state
   const [editingPaste, setEditingPaste] = useState<CollectionPaste | null>(null);
@@ -109,6 +110,7 @@ export default function DashboardPage() {
     setSelectedPastes(new Set());
     setCollectionPastes([]);
     setFormError('');
+    setShowAddExisting(false);
     setEditingPaste(null);
     resetPasteForm();
   };
@@ -218,6 +220,21 @@ export default function DashboardPage() {
 
   const removePaste = (pasteId: string) => {
     setCollectionPastes(prev => prev.filter(p => p.id !== pasteId).map((p, i) => ({ ...p, order: i })));
+  };
+
+  const addExistingPaste = (paste: UserPaste) => {
+    setCollectionPastes(prev => [
+      ...prev,
+      {
+        id: paste.id,
+        title: paste.title,
+        content: paste.content,
+        order: prev.length,
+        maxViews: paste.maxViews,
+        ttlSeconds: paste.ttlSeconds,
+        viewCount: paste.viewCount
+      }
+    ]);
   };
 
   // Create collection
@@ -817,15 +834,46 @@ export default function DashboardPage() {
                       <h3 className="text-sm font-medium text-gray-400 uppercase tracking-wider">
                         Pastes ({collectionPastes.length})
                       </h3>
-                      <button
-                        onClick={openCreatePaste}
-                        className="px-3 py-1.5 bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-500 hover:to-purple-500 text-white rounded text-xs font-medium transition-all"
-                      >
-                        + New Paste
-                      </button>
+                      <div className="flex gap-2">
+                        <button
+                          onClick={() => setShowAddExisting(!showAddExisting)}
+                          className="px-3 py-1.5 bg-white/10 hover:bg-white/20 text-white rounded text-xs font-medium transition-all"
+                        >
+                          {showAddExisting ? 'Done' : '+ Add Existing'}
+                        </button>
+                        <button
+                          onClick={openCreatePaste}
+                          className="px-3 py-1.5 bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-500 hover:to-purple-500 text-white rounded text-xs font-medium transition-all"
+                        >
+                          + New Paste
+                        </button>
+                      </div>
                     </div>
 
-                    {collectionPastes.length === 0 ? (
+                    {showAddExisting && (
+                      <div className="bg-black/30 border border-white/10 rounded-lg max-h-48 overflow-y-auto mb-4">
+                        {pastes.filter(p => !collectionPastes.some(cp => cp.id === p.id)).length === 0 ? (
+                          <div className="p-4 text-center text-gray-400 text-sm">No available pastes to add</div>
+                        ) : (
+                          pastes.filter(p => !collectionPastes.some(cp => cp.id === p.id)).map(paste => (
+                            <div key={paste.id} className="flex items-center justify-between p-3 border-b border-white/5 last:border-0 hover:bg-white/5 transition-colors">
+                              <div className="min-w-0 mr-3">
+                                <div className="text-white text-sm truncate">{paste.title}</div>
+                                <div className="text-xs text-gray-500 truncate">{paste.content.substring(0, 30)}...</div>
+                              </div>
+                              <button
+                                onClick={() => addExistingPaste(paste)}
+                                className="px-3 py-1 bg-white/10 hover:bg-white/20 text-white rounded text-xs transition-colors shrink-0"
+                              >
+                                Add
+                              </button>
+                            </div>
+                          ))
+                        )}
+                      </div>
+                    )}
+
+                    {!showAddExisting && collectionPastes.length === 0 ? (
                       <div className="bg-white/5 border border-white/10 rounded-lg p-6 text-center">
                         <div className="text-3xl mb-2 opacity-50">📄</div>
                         <p className="text-gray-400 text-sm mb-3">No pastes yet</p>

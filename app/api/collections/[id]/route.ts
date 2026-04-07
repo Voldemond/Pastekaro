@@ -117,14 +117,24 @@ export async function PUT(
       WHERE id = ${id}
     `;
 
-        // Update paste orders if provided
+        // Process pastes: Bulk add, update order, and remove unselected
         if (pastes && Array.isArray(pastes)) {
+            const pasteIds = pastes.map((p: any) => p.pasteId);
+
+            // 1. Reset all pastes currently in this package
+            await sql`
+                UPDATE pastes
+                SET package_id = NULL, order_in_package = 0
+                WHERE package_id = ${id}
+            `;
+
+            // 2. Add or Update the pastes provided in the list
             for (const paste of pastes) {
                 await sql`
-          UPDATE pastes
-          SET order_in_package = ${paste.order}
-          WHERE id = ${paste.pasteId} AND package_id = ${id}
-        `;
+                    UPDATE pastes
+                    SET package_id = ${id}, order_in_package = ${paste.order}
+                    WHERE id = ${paste.pasteId} AND user_id = ${session.user.id}
+                `;
             }
         }
 
