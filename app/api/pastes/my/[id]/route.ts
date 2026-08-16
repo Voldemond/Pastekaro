@@ -80,14 +80,20 @@ export async function PUT(
             );
         }
 
-        // Build update query dynamically
+        const hasMaxViews = Object.hasOwn(body, 'maxViews');
+        const hasTtl = Object.hasOwn(body, 'ttlSeconds');
+
         const result = await sql`
             UPDATE pastes
-            SET 
+            SET
                 title = COALESCE(${title}, title),
                 content = COALESCE(${content}, content),
-                max_views = ${maxViews !== undefined ? maxViews : null},
-                ttl_seconds = ${ttlSeconds !== undefined ? ttlSeconds : null}
+                max_views = CASE WHEN ${hasMaxViews}::boolean
+                                 THEN ${maxViews ?? null}::integer
+                                 ELSE max_views END,
+                ttl_seconds = CASE WHEN ${hasTtl}::boolean
+                                   THEN ${ttlSeconds ?? null}::integer
+                                   ELSE ttl_seconds END
             WHERE id = ${id} AND user_id = ${session.user.id}
             RETURNING id, title, content, max_views, ttl_seconds, view_count
         `;

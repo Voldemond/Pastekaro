@@ -3,9 +3,15 @@ import { sql } from '@/lib/db';
 
 export async function POST(request: NextRequest) {
     try {
-        // Check admin secret for security
+        if (process.env.NODE_ENV === 'production') {
+            return NextResponse.json(
+                { error: 'Not available in production' },
+                { status: 403 }
+            );
+        }
+
         const secret = request.nextUrl.searchParams.get('secret');
-        const adminSecret = process.env.ADMIN_SECRET || 'unknown';
+        const adminSecret = process.env.ADMIN_SECRET;
 
         if (secret !== adminSecret) {
             return NextResponse.json(

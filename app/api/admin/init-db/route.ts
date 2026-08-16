@@ -5,7 +5,7 @@ export async function POST(request: NextRequest) {
   try {
     // Check admin secret for security
     const secret = request.nextUrl.searchParams.get('secret');
-    const adminSecret = process.env.ADMIN_SECRET || 'unknown';
+    const adminSecret = process.env.ADMIN_SECRET;
     
     if (secret !== adminSecret) {
       return NextResponse.json(

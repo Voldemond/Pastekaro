@@ -9,7 +9,7 @@ export async function DELETE(
   try {
     // Check admin secret
     const secret = request.nextUrl.searchParams.get('secret');
-    const adminSecret = process.env.ADMIN_SECRET || 'unknown';
+    const adminSecret = process.env.ADMIN_SECRET;
 
     if (secret !== adminSecret) {
       return NextResponse.json(
